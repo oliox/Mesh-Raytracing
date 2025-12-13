@@ -92,6 +92,24 @@ void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
     }
 }
 
+void CheckShaderCompile(GLuint shader, const char* name)
+{
+    GLint success = 0;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+
+    if (!success)
+    {
+        GLint logLength = 0;
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
+
+        std::string log(logLength, '\0');
+        glGetShaderInfoLog(shader, logLength, nullptr, log.data());
+
+        std::cerr << "Shader compile error (" << name << "):\n";
+        std::cerr << log << std::endl;
+    }
+}
+
 struct MeshVertex {
     float position[3];
     float normal[3];
@@ -129,7 +147,7 @@ int main(void)
 {
 
     Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile("C:/Users/oliox/Documents/Code/Mesh-Raytracing/meshes/closed/camel_simple.obj", 
+    const aiScene* scene = importer.ReadFile("C:/Users/oliox/Documents/Code/Mesh-Raytracing/meshes/closed/cube.obj", 
                                             aiProcess_Triangulate | 
                                             aiProcess_FlipUVs | 
                                             aiProcess_GenNormals);
@@ -143,43 +161,43 @@ int main(void)
 
         aiMesh* mesh = scene->mMeshes[0]; // load first mesh
 
-    // save mesh data onto cpu
-    std::vector<MeshVertex> vertices;
-    std::vector<unsigned int> indices;
+    // // save mesh data onto cpu
+    // std::vector<MeshVertex> vertices;
+    // std::vector<unsigned int> indices;
 
-    vertices.reserve(mesh->mNumVertices);
+    // vertices.reserve(mesh->mNumVertices);
 
-    for (unsigned int i = 0; i < mesh->mNumVertices; i++)
-    {
-        MeshVertex v;
+    // for (unsigned int i = 0; i < mesh->mNumVertices; i++)
+    // {
+    //     MeshVertex v;
 
-        v.position[0] = mesh->mVertices[i].x;
-        v.position[1] = mesh->mVertices[i].y;
-        v.position[2] = mesh->mVertices[i].z;
+    //     v.position[0] = mesh->mVertices[i].x;
+    //     v.position[1] = mesh->mVertices[i].y;
+    //     v.position[2] = mesh->mVertices[i].z;
 
-        v.normal[0] = mesh->mNormals[i].x;
-        v.normal[1] = mesh->mNormals[i].y;
-        v.normal[2] = mesh->mNormals[i].z;
+    //     v.normal[0] = mesh->mNormals[i].x;
+    //     v.normal[1] = mesh->mNormals[i].y;
+    //     v.normal[2] = mesh->mNormals[i].z;
 
-        if (mesh->mTextureCoords[0]) {
-            v.uv[0] = mesh->mTextureCoords[0][i].x;
-            v.uv[1] = mesh->mTextureCoords[0][i].y;
-        } else {
-            v.uv[0] = v.uv[1] = 0.0f;
-        }
+    //     if (mesh->mTextureCoords[0]) {
+    //         v.uv[0] = mesh->mTextureCoords[0][i].x;
+    //         v.uv[1] = mesh->mTextureCoords[0][i].y;
+    //     } else {
+    //         v.uv[0] = v.uv[1] = 0.0f;
+    //     }
 
-        vertices.push_back(v);
-    }
+    //     vertices.push_back(v);
+    // }
 
-    indices.reserve(mesh->mNumFaces * 3);
+    // indices.reserve(mesh->mNumFaces * 3);
 
-    for (unsigned int i = 0; i < mesh->mNumFaces; i++)
-    {
-        aiFace& face = mesh->mFaces[i];
-        indices.push_back(face.mIndices[0]);
-        indices.push_back(face.mIndices[1]);
-        indices.push_back(face.mIndices[2]);
-    }
+    // for (unsigned int i = 0; i < mesh->mNumFaces; i++)
+    // {
+    //     aiFace& face = mesh->mFaces[i];
+    //     indices.push_back(face.mIndices[0]);
+    //     indices.push_back(face.mIndices[1]);
+    //     indices.push_back(face.mIndices[2]);
+    // }
 
     glfwSetErrorCallback(error_callback);
  
@@ -208,15 +226,18 @@ int main(void)
     std::vector<BVHNode> bounding_volumes;
 
     triangles.reserve(mesh->mNumFaces);
-    // bounding_volumes.reserve(100); // todo
+    bounding_volumes.reserve(100); // todo
+    //build triangles
     for (unsigned int i = 0; i < mesh->mNumFaces; i++)
     {
         Triangle t;
 
         aiFace& face = mesh->mFaces[i];
-        int i0 = face.mIndices[0];
-        int i1 = face.mIndices[2];
-        int i2 = face.mIndices[2];
+        if (face.mNumIndices != 3)
+            continue;
+        unsigned int i0 = face.mIndices[0];
+        unsigned int i1 = face.mIndices[1];
+        unsigned int i2 = face.mIndices[2];
         t.v0[0] = mesh->mVertices[i0].x;
         t.v0[1] = mesh->mVertices[i0].y;
         t.v0[2] = mesh->mVertices[i0].z;
@@ -226,6 +247,8 @@ int main(void)
         t.v2[0] = mesh->mVertices[i2].x;
         t.v2[1] = mesh->mVertices[i2].y;
         t.v2[2] = mesh->mVertices[i2].z;
+
+        printf("%f\n", t.v0[0]);
 
         aiVector3D p0 = mesh->mVertices[i0];
         aiVector3D p1 = mesh->mVertices[i1];
@@ -241,6 +264,8 @@ int main(void)
         t.normal[0] = normal[0];
         t.normal[1] = normal[1];
         t.normal[2] = normal[2];
+
+        triangles.push_back(t);
     }
     //build them
 
@@ -297,6 +322,7 @@ int main(void)
     const GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragment_shader, 1, &fragment_shader_text, NULL);
     glCompileShader(fragment_shader);
+    CheckShaderCompile(fragment_shader, "FRAGMENT");
  
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex_shader);

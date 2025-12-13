@@ -37,11 +37,50 @@ layout(std430, binding = 0) buffer TriangleBuffer {
 //     BVHNode nodes[];
 // };
 
+bool rayTriangleIntersect(
+    vec3 orig,
+    vec3 dir,
+    vec3 v0,
+    vec3 v1,
+    vec3 v2
+) {
+    const float EPSILON = 1e-6;
+
+    vec3 e1 = v1 - v0;
+    vec3 e2 = v2 - v0;
+
+    vec3 pvec = cross(dir, e2);
+    float det = dot(e1, pvec);
+
+    if (abs(det) < EPSILON)
+        return false;
+
+    float invDet = 1.0 / det;
+
+    vec3 tvec = orig - v0;
+    float u = dot(tvec, pvec) * invDet;
+    if (u < 0.0 || u > 1.0)
+        return false;
+
+    vec3 qvec = cross(tvec, e1);
+    float v = dot(dir, qvec) * invDet;
+    if (v < 0.0 || u + v > 1.0)
+        return false;
+
+    float t = dot(e2, qvec) * invDet;
+    return t > 0.0;
+}
+
 void main() {
-    Triangle tri = triangles[i];
-    vec3 rayDir = normalize(
-        (invViewProj * vec4(uv * 2.0 - 1.0, 1.0, 1.0)).xyz
-    );
-    fragment = vec4(u,v,0.0, 1.0);
+    // Triangle tri = triangles[i];
+    // vec3 rayDir = normalize(
+    //     (invViewProj * vec4(uv * 2.0 - 1.0, 1.0, 1.0)).xyz
+    // );
+    
+    if (rayTriangleIntersect(vec3(uv.x, uv.y, 0.0), vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, 0.1), vec3(0.5, 0.0, 0.1), vec3(0.5, 0.5, 0.1))) {
+        fragment = vec4(uv.x,uv.y,0.0, 1.0);
+    } else {
+        fragment = vec4(0.0,0.0,0.0, 1.0);
+    }
     // BVHNode node = nodes[nodeIndex];
 }

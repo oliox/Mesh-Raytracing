@@ -11,6 +11,7 @@
 in vec2 uv;
 uniform mat4 invViewProj;
 uniform vec3 cameraPos;
+uniform mat4 MVP;
 out vec4 fragment;
 
 struct Triangle {
@@ -76,11 +77,36 @@ void main() {
     // vec3 rayDir = normalize(
     //     (invViewProj * vec4(uv * 2.0 - 1.0, 1.0, 1.0)).xyz
     // );
+    vec3 ro = (MVP*vec4(uv.x-0.5, uv.y-0.5, -1.0, 0.0)).xyz;
+    vec3 rd = (MVP*vec4(0.0, 0.0, 1.0, 0.0)).xyz;
     
-    if (rayTriangleIntersect(vec3(uv.x, uv.y, 0.0), vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, 0.1), vec3(0.5, 0.0, 0.1), vec3(0.5, 0.5, 0.1))) {
-        fragment = vec4(uv.x,uv.y,0.0, 1.0);
+    bool hit = false;
+    float closestT = 1e30;
+    vec3 hitNormal = vec3(0.0);
+
+    for (int i = 0; i < triangles.length(); i++) {
+        Triangle tri = triangles[i];
+
+        float t;
+        if (rayTriangleIntersect(
+                ro,
+                rd,
+                tri.v0.xyz,
+                tri.v1.xyz,
+                tri.v2.xyz))
+        {
+            // If you later modify the function to return t,
+            // you can do proper depth sorting here.
+            hit = true;
+            hitNormal = normalize(tri.normal.xyz);
+        }
+    }
+
+    if (hit) {
+        // Simple normal-based shading
+        fragment = vec4(hitNormal * 0.5 + 0.5, 1.0);
     } else {
-        fragment = vec4(0.0,0.0,0.0, 1.0);
+        fragment = vec4(0.0, 0.0, 0.0, 1.0);
     }
     // BVHNode node = nodes[nodeIndex];
 }

@@ -81,8 +81,8 @@ void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
         // printf("Dragging: dx = %.2f, dy = %.2f\n", dx, dy);
         float sensitivity = 0.005f;
 
-        rotY += (float)dx * sensitivity;   // horizontal drag rotates around Y axis
-        rotX += (float)dy * sensitivity;   // vertical drag rotates around X axis
+        rotY -= (float)dx * sensitivity;   // horizontal drag rotates around Y axis
+        rotX -= (float)dy * sensitivity;   // vertical drag rotates around X axis
 
 
         // TODO: rotate camera, pan, move object, etc.
@@ -109,12 +109,6 @@ void CheckShaderCompile(GLuint shader, const char* name)
         std::cerr << log << std::endl;
     }
 }
-
-struct MeshVertex {
-    float position[3];
-    float normal[3];
-    float uv[2];
-};
 
 // array of triangles
 // array of boxes -> pointer to children, list of faces in them
@@ -143,61 +137,155 @@ struct alignas(16) BVHNode {
 };
 
 
+//A must be a list of triangles inside 
+int buildBVHNode(std::vector<BVHNode> & bounding_volumes, std::vector<Triangle> & triangles, int firstTri, int numTri, aiVector3D min, aiVector3D max, int lastAxis)
+{
+    printf("this node min: %f %f %f \n", min.x, min.y, min[2]);
+    printf("this node max: %f %f %f \n", max.x, max.y, max[2]);
+    BVHNode b;
+    bounding_volumes.emplace_back(b);   // construct in-place
+    int idx = bounding_volumes.size() - 1;
+    // bounding_volumes[idx].boundsMin[0] = mesh->mAABB.mMin.x;
+    // bounding_volumes[idx].boundsMin[1] = mesh->mAABB.mMin.y;
+    // bounding_volumes[idx].boundsMin[2] = mesh->mAABB.mMin.z;
+    // bounding_volumes[idx].boundsMax[0] = mesh->mAABB.mMax.x;
+    // bounding_volumes[idx].boundsMax[1] = mesh->mAABB.mMax.y;
+    // bounding_volumes[idx].boundsMax[2] = mesh->mAABB.mMax.z;
+
+    // xLen = max.x-min.x;
+    // yLen = max.y-min.y;
+    // zLen = max.z-min.z;
+
+    // std::vector<int> vec = {xLen, yLen, zLen};
+    // auto max_it = std::max_element(vec.begin(), vec.end());
+
+    // // Calculate the distance (index) from the beginning of the vector to the max element
+    // int axis = static_cast<int>(std::distance(vec.begin(), max_it));
+    //rotate through all 3 axes
+    int axis = (lastAxis + 1) % 3;
+    
+    auto leftMin = min;
+    auto leftMax = max;
+    leftMax[axis] = (min[axis] + max[axis])/2;
+
+    auto rightMin = min;
+    auto rightMax = max;
+    rightMin[axis] = (min[axis] + max[axis])/2;
+
+    //loop through triangles, if centerpoint(?) is less than pivot put in left otherwise right
+    // store max overflow, expand left box size to cover that overflow
+    if (numTri != 0 && numTri != 1) { 
+        std::vector<Triangle> leftPartition;
+        std::vector<Triangle> rightPartition;
+        float maxPointInLeft = -100000;
+        float minPointInRight = 100000;
+        for (int i = firstTri; i < firstTri+numTri; i++) {
+            auto tri = triangles[i];
+            auto pivot = (min[axis] + max[axis])/2;
+            float pos = (tri.v0[axis] + tri.v1[axis] + tri.v2[axis])/3;
+            float minVert = std::min(tri.v0[axis], std::min(tri.v1[axis], tri.v2[axis]));
+            // if triangle is on the boundary put into left side, then expand left side to fully cover
+            // this might not terminate, better way could be to use midpoint and grow both right and left side
+            if (pos < pivot) {
+                leftPartition.push_back(triangles[i]);
+                float maxVert = std::max(tri.v0[axis], std::max(tri.v1[axis], tri.v2[axis]));
+                if (maxVert > maxPointInLeft) {
+                    maxPointInLeft = maxVert;
+                }
+            } else {
+                rightPartition.push_back(triangles[i]);
+                float minVert = std::min(tri.v0[axis], std::min(tri.v1[axis], tri.v2[axis]));
+                if (minVert < minPointInRight) {
+                    minPointInRight = minVert;
+                }
+            }
+
+        }
+        //ensures all triangles are fully enclosed
+        // this could leave triangles which are actually in other bounding boxes and not counted. But every triangle will exist in exactly one box per level and the array wont be messed with (i hope)
+        // I could get an infinite loop where it halves in the long axis but then a really long triangle in that axis just regrows it to the same size
+        // if (maxPointInLeft > (min[axis] + max[axis])/2) {
+        //     leftMax[axis] = maxPointInLeft;
+        // }
+        // if (minPointInRight < (min[axis] + max[axis])/2) {
+        //     rightMax[axis] = minPointInRight;
+        // }
+        //overwrite back into triangles
+        // left child gets firstTri:firstTri+leftPartition.size()(-1?) 
+        for (int i = firstTri; i < firstTri+leftPartition.size(); i++) {
+            triangles[i] = leftPartition[i-firstTri];
+        }
+        for (int i = firstTri+leftPartition.size(); i < firstTri+numTri; i++) {
+            triangles[i] = rightPartition[i-firstTri-leftPartition.size()];
+        }
+
+        bounding_volumes[idx].left = buildBVHNode(bounding_volumes, triangles, firstTri, leftPartition.size(), leftMin, leftMax, axis);
+        bounding_volumes[idx].right = buildBVHNode(bounding_volumes, triangles, firstTri + leftPartition.size(), rightPartition.size(), rightMin, rightMax, axis);
+    } else {
+        bounding_volumes[idx].left = -1;
+        bounding_volumes[idx].right = -1;
+    }
+    //todo add termination condition
+    bounding_volumes[idx].firstTri = firstTri;
+    bounding_volumes[idx].triCount = numTri;
+    return idx;
+}
+
+struct MeshVertex {
+    float position[3];
+    float normal[3];
+    float uv[2];
+};
+
+
 int main(void)
 {
 
     Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile("C:/Users/oliox/Documents/Code/Mesh-Raytracing/meshes/closed/cube.obj", 
+    const aiScene* scene = importer.ReadFile("C:/Users/oliox/Documents/Code/Mesh-Raytracing/meshes/closed/camel_simple.obj", 
                                             aiProcess_Triangulate | 
                                             aiProcess_FlipUVs | 
-                                            aiProcess_GenNormals);
+                                            aiProcess_GenNormals |
+                                            aiProcess_GenBoundingBoxes);
 
-        if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
+    aiMesh* mesh = scene->mMeshes[0]; // load first mesh
+    // normalize mesh
+    aiVector3D center = (mesh->mAABB.mMin + mesh->mAABB.mMax) * 0.5f;
+    aiVector3D extent = mesh->mAABB.mMax - mesh->mAABB.mMin;
+
+    float maxExtent = std::max(extent.x, std::max(extent.y, extent.z));
+    float scale = 1.0f / maxExtent;   // fits into [-0.5, 0.5]
+
+    for (unsigned int m = 0; m < scene->mNumMeshes; ++m)
+    {
+        aiMesh* mesh = scene->mMeshes[m];
+
+        for (unsigned int v = 0; v < mesh->mNumVertices; ++v)
         {
-            printf("error loading the model sad");
-        }else {
-        printf("loaded the model happy");
+            mesh->mVertices[v] -= center;
+            mesh->mVertices[v] *= scale;
         }
 
-        aiMesh* mesh = scene->mMeshes[0]; // load first mesh
+        // Optional: renormalize normals (safe practice)
+        if (mesh->HasNormals())
+        {
+            for (unsigned int v = 0; v < mesh->mNumVertices; ++v)
+            {
+                mesh->mNormals[v].Normalize();
+            }
+        }
+    }
+    mesh->mAABB.mMin = (mesh->mAABB.mMin - center) / maxExtent;
+    mesh->mAABB.mMax = (mesh->mAABB.mMax  - center) / maxExtent;
 
-    // // save mesh data onto cpu
-    // std::vector<MeshVertex> vertices;
-    // std::vector<unsigned int> indices;
 
-    // vertices.reserve(mesh->mNumVertices);
+    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
+    {
+        printf("error loading the model sad");
+    }else {
+    printf("loaded the model happy");
+    }
 
-    // for (unsigned int i = 0; i < mesh->mNumVertices; i++)
-    // {
-    //     MeshVertex v;
-
-    //     v.position[0] = mesh->mVertices[i].x;
-    //     v.position[1] = mesh->mVertices[i].y;
-    //     v.position[2] = mesh->mVertices[i].z;
-
-    //     v.normal[0] = mesh->mNormals[i].x;
-    //     v.normal[1] = mesh->mNormals[i].y;
-    //     v.normal[2] = mesh->mNormals[i].z;
-
-    //     if (mesh->mTextureCoords[0]) {
-    //         v.uv[0] = mesh->mTextureCoords[0][i].x;
-    //         v.uv[1] = mesh->mTextureCoords[0][i].y;
-    //     } else {
-    //         v.uv[0] = v.uv[1] = 0.0f;
-    //     }
-
-    //     vertices.push_back(v);
-    // }
-
-    // indices.reserve(mesh->mNumFaces * 3);
-
-    // for (unsigned int i = 0; i < mesh->mNumFaces; i++)
-    // {
-    //     aiFace& face = mesh->mFaces[i];
-    //     indices.push_back(face.mIndices[0]);
-    //     indices.push_back(face.mIndices[1]);
-    //     indices.push_back(face.mIndices[2]);
-    // }
 
     glfwSetErrorCallback(error_callback);
  
@@ -248,7 +336,7 @@ int main(void)
         t.v2[1] = mesh->mVertices[i2].y;
         t.v2[2] = mesh->mVertices[i2].z;
 
-        printf("%f\n", t.v0[0]);
+        // printf("%f\n", t.v0[0]);
 
         aiVector3D p0 = mesh->mVertices[i0];
         aiVector3D p1 = mesh->mVertices[i1];
@@ -267,7 +355,20 @@ int main(void)
 
         triangles.push_back(t);
     }
-    //build them
+
+    //build bvh
+    printf("%d \n", buildBVHNode(bounding_volumes, triangles, 0, triangles.size(), mesh->mAABB.mMin, mesh->mAABB.mMax, 0));
+    // BVHNode b0;
+    // b0.boundsMin[0] = mesh->mAABB.mMin.x;
+    // b0.boundsMin[1] = mesh->mAABB.mMin.y;
+    // b0.boundsMin[2] = mesh->mAABB.mMin.z;
+    // b0.boundsMax[0] = mesh->mAABB.mMax.x;
+    // b0.boundsMax[1] = mesh->mAABB.mMax.y;
+    // b0.boundsMax[2] = mesh->mAABB.mMax.z;
+    // b0.firstTri = 0;
+    printf("%f %f %f\n", mesh->mAABB.mMin.x, mesh->mAABB.mMin.y, mesh->mAABB.mMin.z);
+    
+    printf("%f %f %f\n", mesh->mAABB.mMax.x, mesh->mAABB.mMax.y, mesh->mAABB.mMax.z);
 
     GLuint triangleSSBO;
     glGenBuffers(1, &triangleSSBO);

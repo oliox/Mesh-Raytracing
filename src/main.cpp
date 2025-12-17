@@ -81,7 +81,7 @@ void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
         // printf("Dragging: dx = %.2f, dy = %.2f\n", dx, dy);
         float sensitivity = 0.005f;
 
-        rotY -= (float)dx * sensitivity;   // horizontal drag rotates around Y axis
+        rotY += (float)dx * sensitivity;   // horizontal drag rotates around Y axis
         rotX -= (float)dy * sensitivity;   // vertical drag rotates around X axis
 
 
@@ -140,8 +140,10 @@ struct alignas(16) BVHNode {
 //A must be a list of triangles inside 
 int buildBVHNode(std::vector<BVHNode> & bounding_volumes, std::vector<Triangle> & triangles, int firstTri, int numTri, aiVector3D min, aiVector3D max, int lastAxis)
 {
-    printf("this node min: %f %f %f \n", min.x, min.y, min[2]);
-    printf("this node max: %f %f %f \n", max.x, max.y, max[2]);
+    // if (bounding_volumes.size() == 0) {
+    // printf("this node min: %f %f %f \n", min.x, min.y, min[2]);
+    // printf("this node max: %f %f %f \n", max.x, max.y, max[2]);
+    // }
     BVHNode b;
     bounding_volumes.emplace_back(b);   // construct in-place
     int idx = bounding_volumes.size() - 1;
@@ -228,6 +230,12 @@ int buildBVHNode(std::vector<BVHNode> & bounding_volumes, std::vector<Triangle> 
     //todo add termination condition
     bounding_volumes[idx].firstTri = firstTri;
     bounding_volumes[idx].triCount = numTri;
+    bounding_volumes[idx].boundsMin[0] = min.x;
+    bounding_volumes[idx].boundsMin[1] = min.y;
+    bounding_volumes[idx].boundsMin[2] = min.z;
+    bounding_volumes[idx].boundsMax[0] = max.x;
+    bounding_volumes[idx].boundsMax[1] = max.y;
+    bounding_volumes[idx].boundsMax[2] = max.z;
     return idx;
 }
 
@@ -314,7 +322,7 @@ int main(void)
     std::vector<BVHNode> bounding_volumes;
 
     triangles.reserve(mesh->mNumFaces);
-    bounding_volumes.reserve(100); // todo
+    bounding_volumes.reserve(500); // todo
     //build triangles
     for (unsigned int i = 0; i < mesh->mNumFaces; i++)
     {
@@ -366,9 +374,10 @@ int main(void)
     // b0.boundsMax[1] = mesh->mAABB.mMax.y;
     // b0.boundsMax[2] = mesh->mAABB.mMax.z;
     // b0.firstTri = 0;
-    printf("%f %f %f\n", mesh->mAABB.mMin.x, mesh->mAABB.mMin.y, mesh->mAABB.mMin.z);
-    
-    printf("%f %f %f\n", mesh->mAABB.mMax.x, mesh->mAABB.mMax.y, mesh->mAABB.mMax.z);
+
+    auto test = bounding_volumes[0];
+    printf("this node min: %f %f %f \n", bounding_volumes[0].boundsMin[0], bounding_volumes[0].boundsMin[1], bounding_volumes[0].boundsMin[2]);
+    printf("this node min: %f %f %f \n", bounding_volumes[0].boundsMax[0], bounding_volumes[0].boundsMax[1], bounding_volumes[0].boundsMax[2]);
 
     GLuint triangleSSBO;
     glGenBuffers(1, &triangleSSBO);
@@ -381,17 +390,17 @@ int main(void)
     );
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, triangleSSBO);
 
-    // GLuint bvhSSBO;
-    // glGenBuffers(1, &bvhSSBO);
-    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO);
-    // glBufferData(
-    //     GL_SHADER_STORAGE_BUFFER,
-    //     bvhNodes.size() * sizeof(BVHNode),
-    //     bvhNodes.data(),
-    //     GL_STATIC_DRAW
-    // );
+    GLuint bvhSSBO;
+    glGenBuffers(1, &bvhSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO);
+    glBufferData(
+        GL_SHADER_STORAGE_BUFFER,
+        bounding_volumes.size() * sizeof(BVHNode),
+        bounding_volumes.data(),
+        GL_STATIC_DRAW
+    );
 
-    // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, bvhSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, bvhSSBO);
     //todo somehow I have to specify where in the object the elements are
  
 //     GLuint vao, vbo, ebo;

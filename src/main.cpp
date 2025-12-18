@@ -138,7 +138,7 @@ struct alignas(16) BVHNode {
 
 
 //A must be a list of triangles inside 
-int buildBVHNode(std::vector<BVHNode> & bounding_volumes, std::vector<Triangle> & triangles, int firstTri, int numTri, aiVector3D min, aiVector3D max, int lastAxis)
+int buildBVHNode(std::vector<BVHNode> & bounding_volumes, std::vector<Triangle> & triangles, int firstTri, int numTri, aiVector3D min, aiVector3D max, int lastAxis, int failedSplits)
 {
     // if (bounding_volumes.size() == 0) {
     // printf("this node min: %f %f %f \n", min.x, min.y, min[2]);
@@ -174,18 +174,17 @@ int buildBVHNode(std::vector<BVHNode> & bounding_volumes, std::vector<Triangle> 
     auto rightMax = max;
     rightMin[axis] = (min[axis] + max[axis])/2;
 
+    auto pivot = (min[axis] + max[axis])/2;
     //loop through triangles, if centerpoint(?) is less than pivot put in left otherwise right
     // store max overflow, expand left box size to cover that overflow
     if (numTri != 0 && numTri != 1) { 
         std::vector<Triangle> leftPartition;
         std::vector<Triangle> rightPartition;
-        float maxPointInLeft = -100000;
-        float minPointInRight = 100000;
+        float maxPointInLeft = pivot;
+        float minPointInRight = pivot;
         for (int i = firstTri; i < firstTri+numTri; i++) {
             auto tri = triangles[i];
-            auto pivot = (min[axis] + max[axis])/2;
             float pos = (tri.v0[axis] + tri.v1[axis] + tri.v2[axis])/3;
-            float minVert = std::min(tri.v0[axis], std::min(tri.v1[axis], tri.v2[axis]));
             // if triangle is on the boundary put into left side, then expand left side to fully cover
             // this might not terminate, better way could be to use midpoint and grow both right and left side
             if (pos < pivot) {
@@ -201,19 +200,16 @@ int buildBVHNode(std::vector<BVHNode> & bounding_volumes, std::vector<Triangle> 
                     minPointInRight = minVert;
                 }
             }
-
         }
         //ensures all triangles are fully enclosed
         // this could leave triangles which are actually in other bounding boxes and not counted. But every triangle will exist in exactly one box per level and the array wont be messed with (i hope)
-        // I could get an infinite loop where it halves in the long axis but then a really long triangle in that axis just regrows it to the same size
-        // if (maxPointInLeft > (min[axis] + max[axis])/2) {
-        //     leftMax[axis] = maxPointInLeft;
-        // }
-        // if (minPointInRight < (min[axis] + max[axis])/2) {
-        //     rightMax[axis] = minPointInRight;
-        // }
+        if (maxPointInLeft > pivot) {
+            leftMax[axis] = maxPointInLeft;
+        }
+        if (minPointInRight < pivot) {
+            rightMin[axis] = minPointInRight;
+        }
         //overwrite back into triangles
-        // left child gets firstTri:firstTri+leftPartition.size()(-1?) 
         for (int i = firstTri; i < firstTri+leftPartition.size(); i++) {
             triangles[i] = leftPartition[i-firstTri];
         }
@@ -221,8 +217,21 @@ int buildBVHNode(std::vector<BVHNode> & bounding_volumes, std::vector<Triangle> 
             triangles[i] = rightPartition[i-firstTri-leftPartition.size()];
         }
 
-        bounding_volumes[idx].left = buildBVHNode(bounding_volumes, triangles, firstTri, leftPartition.size(), leftMin, leftMax, axis);
-        bounding_volumes[idx].right = buildBVHNode(bounding_volumes, triangles, firstTri + leftPartition.size(), rightPartition.size(), rightMin, rightMax, axis);
+        // Avoid infinite loop where it halves in the long axis but then a really long triangle in that axis just regrows it to the same size
+        //this causes early termination though
+        if (leftPartition.size() == numTri || rightPartition.size() == numTri) {
+            if (failedSplits == 2) {
+                bounding_volumes[idx].left = -1;
+                bounding_volumes[idx].right = -1;
+            } else {
+                bounding_volumes[idx].left = buildBVHNode(bounding_volumes, triangles, firstTri, leftPartition.size(), leftMin, leftMax, axis, failedSplits + 1);
+                bounding_volumes[idx].right = buildBVHNode(bounding_volumes, triangles, firstTri + leftPartition.size(), rightPartition.size(), rightMin, rightMax, axis, failedSplits + 1);
+            }
+        } else {
+            bounding_volumes[idx].left = buildBVHNode(bounding_volumes, triangles, firstTri, leftPartition.size(), leftMin, leftMax, axis, 0);
+            bounding_volumes[idx].right = buildBVHNode(bounding_volumes, triangles, firstTri + leftPartition.size(), rightPartition.size(), rightMin, rightMax, axis, 0);
+        }
+
     } else {
         bounding_volumes[idx].left = -1;
         bounding_volumes[idx].right = -1;
@@ -244,6 +253,13 @@ struct MeshVertex {
     float normal[3];
     float uv[2];
 };
+
+void printBVHTriangles(BVHNode b) {
+    for (int i = b.firstTri; i < b.firstTri + b.triCount; i++) {
+        printf("%d ", i);
+    }
+    printf("\n");
+}
 
 
 int main(void)
@@ -365,7 +381,8 @@ int main(void)
     }
 
     //build bvh
-    printf("%d \n", buildBVHNode(bounding_volumes, triangles, 0, triangles.size(), mesh->mAABB.mMin, mesh->mAABB.mMax, 0));
+    printf("%d \n", buildBVHNode(bounding_volumes, triangles, 0, triangles.size(), mesh->mAABB.mMin, mesh->mAABB.mMax, 0, 0));
+    
     // BVHNode b0;
     // b0.boundsMin[0] = mesh->mAABB.mMin.x;
     // b0.boundsMin[1] = mesh->mAABB.mMin.y;
@@ -375,9 +392,9 @@ int main(void)
     // b0.boundsMax[2] = mesh->mAABB.mMax.z;
     // b0.firstTri = 0;
 
-    auto test = bounding_volumes[0];
-    printf("this node min: %f %f %f \n", bounding_volumes[0].boundsMin[0], bounding_volumes[0].boundsMin[1], bounding_volumes[0].boundsMin[2]);
-    printf("this node min: %f %f %f \n", bounding_volumes[0].boundsMax[0], bounding_volumes[0].boundsMax[1], bounding_volumes[0].boundsMax[2]);
+    // printBVHTriangles(bounding_volumes[0]);
+    // printBVHTriangles(bounding_volumes[test.left]);
+    // printBVHTriangles(bounding_volumes[test.right]);
 
     GLuint triangleSSBO;
     glGenBuffers(1, &triangleSSBO);

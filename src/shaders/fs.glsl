@@ -230,7 +230,7 @@ vec2 closestHitFromBVH_iterative()
 
 void main() {
     // 0 = bvh raytraced, 1 = naive raytraced, 2 = bvh visual
-    int viewMode = 1;
+    int viewMode = 2;
     // Triangle tri = triangles[i];
     // vec3 rayDir = normalize(
     //     (invViewProj * vec4(uv * 2.0 - 1.0, 1.0, 1.0)).xyz
@@ -314,7 +314,7 @@ void main() {
                 //     closestT = tHit;
                 //     hit = true;
                 // }
-                hitCounter += 0.1;
+                hitCounter += 0.05;
                 hit = true;
             }
         }

@@ -105,63 +105,13 @@ bool rayTriangleIntersect(
     return true;
 }
 
-// return (pos, triindex)
-// vec2 closestHitFromBVH(BVHNode b) {
-//     if (rayAABBIntersect(
-//                 ro,
-//                 rd,
-//                 b.boundsMin.xyz,
-//                 b.boundsMax.xyz
-//             )) {
-//                 if (b.left == -1 && b.right == -1) {
-//                     // return triangle intersections
-//                     // there should only be 1 triangle at this level anyway
-//                     for (int i = 0; i < b.triCount; i++) {
-//                         Triangle tri = triangles[b.firstTri + i];
-//                         float t;
-//                         vec3 p;
-//                         if (rayTriangleIntersect(ro,
-//                                 rd,
-//                                 tri.v0.xyz,
-//                                 tri.v1.xyz,
-//                                 tri.v2.xyz, t, p)) {
-//                                     return vec2(t, float(b.firstTri + i));
-//                                 }
-                                
-//                     }
-//                     return vec2(10000.0, -1);
-//                 }
-//                 if (b.left == -1) {
-//                     BVHNode right = nodes[b.right];
-//                     return closestHitFromBVH(right);
-//                 }
-//                 if (b.right == -1) {
-//                     BVHNode left = nodes[b.left];
-//                     return closestHitFromBVH(left);
-//                 }
-//                 BVHNode right = nodes[b.right];
-//                 BVHNode left = nodes[b.left];
-  
-//                 vec2 leftHit = closestHitFromBVH(left);
-//                 vec2 rightHit = closestHitFromBVH(right);
-//                 if (leftHit.x < rightHit.x) {
-//                     return leftHit;
-//                 } else {
-//                     return rightHit;
-//                 }
-//             } else {
-//                 return vec2(10000.0, -1);
-//             }
-// }
-
-vec2 closestHitFromBVH_iterative()
+vec2 closestHitFromBVH()
 {
     const int MAX_STACK_SIZE = 64;
 
     int stack[MAX_STACK_SIZE];
     int stackPtr = 0;
 
-    // push root node index
     stack[stackPtr++] = 0;
 
     float closestT = 1e30;
@@ -211,14 +161,12 @@ vec2 closestHitFromBVH_iterative()
         else
         {
             // Push children
-            // (order doesn't matter, but near-first is an optimization)
             if (node.left != -1)
                 stack[stackPtr++] = node.left;
 
             if (node.right != -1)
                 stack[stackPtr++] = node.right;
 
-            // Safety guard
             if (stackPtr >= MAX_STACK_SIZE)
                 break;
         }
@@ -229,12 +177,8 @@ vec2 closestHitFromBVH_iterative()
 
 
 void main() {
-    // 0 = bvh raytraced, 1 = naive raytraced, 2 = bvh visual
-    int viewMode = 2;
-    // Triangle tri = triangles[i];
-    // vec3 rayDir = normalize(
-    //     (invViewProj * vec4(uv * 2.0 - 1.0, 1.0, 1.0)).xyz
-    // );
+    // 0 = bvh raytraced, 1 = naive raytraced, 2 = box visualization
+    int viewMode = 0;
     ro = (MVP*vec4(uv.x-0.5, uv.y-0.5, -1.0, 0.0)).xyz;
     rd = (MVP*vec4(0.0, 0.0, 1.0, 0.0)).xyz;
     
@@ -242,7 +186,7 @@ void main() {
     if (viewMode == 0) {
         fragment = vec4(1.0, 0.05, 0.05, 1.0);
         BVHNode b0 = nodes[0];
-        vec2 closestHit = closestHitFromBVH_iterative();
+        vec2 closestHit = closestHitFromBVH();
         if (closestHit.y == -1) {
             //missed
             fragment = vec4(0.0, 0.0, 0.0, 1.0);
@@ -271,8 +215,6 @@ void main() {
                     tri.v1.xyz,
                     tri.v2.xyz, t, p))
             {
-                // If you later modify the function to return t,
-                // you can do proper depth sorting here.
                 hit = true;
                 if (t < closestT) {
                     closestT = t;
@@ -283,7 +225,6 @@ void main() {
 
         if (hit) {
             // Simple normal-based shading
-            // fragment = vec4(closestT, 1.0);
             fragment = vec4(hitNormal * 0.5 + 0.5, 1.0);
         } else {
             fragment = vec4(0.0, 0.0, 0.0, 1.0);
@@ -294,8 +235,6 @@ void main() {
 
         float closestT = 1e30;
         
-        // fragment = vec4(1.0, 1.0, 0.05, 1.0);
-        // fragment = vec4(nodes[0].boundsMin.y+0.5, nodes[0].boundsMax.y+0.5, 0.0, 1.0);
         float hitCounter = 0.0;
         for (int i = 0; i < nodes.length(); ++i) {
             BVHNode node = nodes[i];
@@ -310,22 +249,16 @@ void main() {
                 node.boundsMin.xyz,
                 node.boundsMax.xyz
             )) {
-                // if (tHit < closestT) {
-                //     closestT = tHit;
-                //     hit = true;
-                // }
-                hitCounter += 0.05;
+                hitCounter += 0.04;
                 hit = true;
             }
         }
 
         if (hit) {
-            fragment = vec4(hitCounter, 0, 0.0, 1.0); // green leaf boxes
+            fragment = vec4(hitCounter, 0, 0.0, 1.0);
         } else {
             fragment = vec4(0.05, 0.05, 0.05, 1.0);
         }
         return;
     }
-    // fragment = vec4(1.0, 0.05, 0.05, 1.0);
-    // BVHNode node = nodes[nodeIndex];
 }

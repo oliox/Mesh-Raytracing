@@ -217,6 +217,7 @@ int buildBVHNode(std::vector<BVHNode> & bounding_volumes, std::vector<Triangle> 
             triangles[i] = rightPartition[i-firstTri-leftPartition.size()];
         }
 
+        //todo dont make extra children for efficiency
         // Avoid infinite loop where it halves in the long axis but then a really long triangle in that axis just regrows it to the same size
         //this causes early termination though
         if (leftPartition.size() == numTri || rightPartition.size() == numTri) {
@@ -266,7 +267,7 @@ int main(void)
 {
 
     Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile("C:/Users/oliox/Documents/Code/Mesh-Raytracing/meshes/closed/camel_simple.obj", 
+    const aiScene* scene = importer.ReadFile("C:/Users/oliox/Documents/Code/Mesh-Raytracing/meshes/mesh-open/mannequin.obj", 
                                             aiProcess_Triangulate | 
                                             aiProcess_FlipUVs | 
                                             aiProcess_GenNormals |
@@ -382,20 +383,8 @@ int main(void)
 
     //build bvh
     printf("%d \n", buildBVHNode(bounding_volumes, triangles, 0, triangles.size(), mesh->mAABB.mMin, mesh->mAABB.mMax, 0, 0));
-    
-    // BVHNode b0;
-    // b0.boundsMin[0] = mesh->mAABB.mMin.x;
-    // b0.boundsMin[1] = mesh->mAABB.mMin.y;
-    // b0.boundsMin[2] = mesh->mAABB.mMin.z;
-    // b0.boundsMax[0] = mesh->mAABB.mMax.x;
-    // b0.boundsMax[1] = mesh->mAABB.mMax.y;
-    // b0.boundsMax[2] = mesh->mAABB.mMax.z;
-    // b0.firstTri = 0;
 
-    // printBVHTriangles(bounding_volumes[0]);
-    // printBVHTriangles(bounding_volumes[test.left]);
-    // printBVHTriangles(bounding_volumes[test.right]);
-
+    // Upload to buffers
     GLuint triangleSSBO;
     glGenBuffers(1, &triangleSSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, triangleSSBO);
@@ -418,22 +407,6 @@ int main(void)
     );
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, bvhSSBO);
-    //todo somehow I have to specify where in the object the elements are
- 
-//     GLuint vao, vbo, ebo;
-//     glGenVertexArrays(1, &vao);
-//     glGenBuffers(1, &vbo);
-//     glGenBuffers(1, &ebo);
-
-//     glBindVertexArray(vao);
-
-//     // VBO
-//     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-//     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(MeshVertex), vertices.data(), GL_STATIC_DRAW);
-
-//     // EBO
-//     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-// glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
  
     std::string vertexShaderCode = LoadFile("C:/Users/oliox/Documents/Code/Mesh-Raytracing/src/shaders/vs.glsl");
     std::string fragmentShaderCode = LoadFile("C:/Users/oliox/Documents/Code/Mesh-Raytracing/src/shaders/fs.glsl");
@@ -457,29 +430,6 @@ int main(void)
     glLinkProgram(program);
  
     const GLint mvp_location = glGetUniformLocation(program, "MVP");
-    // const GLint vpos_location = glGetAttribLocation(program, "vPos");
-    // const GLint vcol_location = glGetAttribLocation(program, "vCol");
- 
-    // // position
-    // glEnableVertexAttribArray(0);
-    // glVertexAttribPointer(0,
-    //                     3, GL_FLOAT, GL_FALSE,
-    //                     sizeof(MeshVertex),
-    //                     (void*)offsetof(MeshVertex, position));
-
-    // // normal
-    // glEnableVertexAttribArray(1);
-    // glVertexAttribPointer(1,
-    //                     3, GL_FLOAT, GL_FALSE,
-    //                     sizeof(MeshVertex),
-    //                     (void*)offsetof(MeshVertex, normal));
-
-    // // uv
-    // glEnableVertexAttribArray(2);
-    // glVertexAttribPointer(2,
-    //                     2, GL_FLOAT, GL_FALSE,
-    //                     sizeof(MeshVertex),
-    //                     (void*)offsetof(MeshVertex, uv));
  
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetCursorPosCallback(window, cursor_position_callback);
@@ -532,7 +482,4 @@ int main(void)
     exit(EXIT_SUCCESS);
 }
 
-//pass triangles into fragment shader
-// use bvh to segment which triangles to check
-// calcualte intersection
 

@@ -178,7 +178,7 @@ vec2 closestHitFromBVH()
 
 void main() {
     // 0 = bvh raytraced, 1 = naive raytraced, 2 = box visualization
-    int viewMode = 0;
+    int viewMode = 2;
     ro = (MVP*vec4(uv.x-0.5, uv.y-0.5, -1.0, 0.0)).xyz;
     rd = (MVP*vec4(0.0, 0.0, 1.0, 0.0)).xyz;
     

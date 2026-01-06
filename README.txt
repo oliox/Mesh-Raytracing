@@ -1,7 +1,16 @@
-Update absolute filepaths for shaders on line 423 and 424 of main.cpp
-Update absolute filepaths of input meshes
+Instructions to run:
 
-external packages required:
+unzip external.zip
+It should contain the following folders
 assimp-master
-glad (just headers? from the web exporter)
+glad
 glfw-3.4
+
+Update absolute filepaths for shaders on line 411 and 412 of main.cpp
+Update absolute filepaths of input meshes line 270
+
+To compile:
+From the root directory of the project
+mkdir build
+cd build
+cmake ..

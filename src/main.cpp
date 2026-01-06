@@ -267,7 +267,7 @@ int main(void)
 {
 
     Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile("C:/Users/oliox/Documents/Code/Mesh-Raytracing/meshes/mesh-open/mannequin.obj", 
+    const aiScene* scene = importer.ReadFile("C:/Users/oliox/Documents/Code/Mesh-Raytracing/meshes/closed/camel_simple.obj", 
                                             aiProcess_Triangulate | 
                                             aiProcess_FlipUVs | 
                                             aiProcess_GenNormals |
